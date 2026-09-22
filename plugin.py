@@ -615,8 +615,8 @@ class BudgetPacerPlugin(MaiBotPlugin):
     async def cmd_budget(self, **kwargs) -> tuple:
         stream_id = self._stream_id(kwargs)
         if not self._is_admin(kwargs):
-            # 未配置 admin_ids 时全部放行；拒绝时静默，只留日志
-            self.ctx.logger.info("预算命令被拒绝：非管理员")
+            # fail-close：未配置 admin_ids 或不在名单内一律拒绝；静默，只留日志
+            self.ctx.logger.info("预算命令被拒绝：非管理员或未配置 admin_ids（fail-close）")
             return True, "", 0
 
         text = self._message_text(kwargs)
@@ -970,23 +970,21 @@ class BudgetPacerPlugin(MaiBotPlugin):
     def _state_path(self) -> Optional[Path]:
         """状态文件路径。
 
-        优先使用 ctx.paths.data_dir（SDK 2.6.0+ 提供，插件自己的数据目录）；
-        取不到时降级为插件目录（写权限通常没问题）；再不行返回 None，
-        此时状态仅存内存，重启后自动重算——附加能力不该让插件加载失败。
+        仅使用 ctx.paths.data_dir（SDK 2.6.0+ 提供，插件自己的数据目录）；
+        取不到时返回 None，状态仅存内存，重启后自动重算——
+        不回退到插件源码目录：整目录更新/重装会覆盖源码目录，
+        且与 SDK 推荐的用户数据路径不一致（审核意见，2026-09-22）。
         """
         paths = getattr(self.ctx, "paths", None)
         data_dir = getattr(paths, "data_dir", None)
-        if data_dir not in (None, ""):
-            try:
-                target = Path(str(data_dir))
-                target.mkdir(parents=True, exist_ok=True)
-                return target / STATE_FILE_NAME
-            except Exception as exc:
-                self.ctx.logger.debug("无法使用 ctx.paths.data_dir：%s", exc)
-
+        if data_dir in (None, ""):
+            return None
         try:
-            return Path(__file__).resolve().parent / STATE_FILE_NAME
-        except Exception:
+            target = Path(str(data_dir))
+            target.mkdir(parents=True, exist_ok=True)
+            return target / STATE_FILE_NAME
+        except Exception as exc:
+            self.ctx.logger.debug("无法使用 ctx.paths.data_dir：%s", exc)
             return None
 
     def _reset_if_new_month(self, now: datetime) -> None:
@@ -1120,13 +1118,18 @@ class BudgetPacerPlugin(MaiBotPlugin):
         return text.split(":")[-1].strip()
 
     def _is_admin(self, kwargs: dict) -> bool:
-        """管理员校验：未配置 admin_ids 时全部放行，拒绝时静默。"""
+        """管理员校验：fail-close——未配置 admin_ids 时拒绝所有命令。
+
+        本插件影响全 bot 的发言频率，一旦被误操作就是整月节奏被改；
+        与只读类插件不同，这里默认拒绝比默认放行安全。
+        拒绝时静默，只留日志。
+        """
         admins = {
             self._normalize_admin_id(item) for item in (self.config.permission.admin_ids or [])
         }
         admins.discard("")
         if not admins:
-            return True
+            return False
 
         user_id = ""
         sources = [kwargs]

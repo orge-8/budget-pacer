@@ -330,11 +330,11 @@ async def scenario_command(bp) -> None:
 
 
 async def scenario_admin_guard(bp) -> None:
-    print("\n[8] 权限：未配置 admin_ids 时放行，配置后拒绝非管理员")
+    print("\n[8] 权限：fail-close（未配置 admin_ids 拒绝），配置后拒绝非管理员")
     now = datetime.now()
 
     plugin, _ctx = new_plugin(bp, build_series(now, 0.0), build_streams())
-    check(plugin._is_admin({"user_id": "999"}) is True, "未配置管理员时放行")
+    check(plugin._is_admin({"user_id": "999"}) is False, "未配置管理员时拒绝（fail-close）")
 
     plugin, _ctx = new_plugin(
         bp,
