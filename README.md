@@ -149,6 +149,14 @@ LLM 也可以调用 `budget_status` 工具回答「这个月花了多少」「�
 ## 测试
 
 ```bash
-python -m pytest tests -q          # 54 个单元测试
-python tests/smoke_test.py         # 10 个场景的冒烟测试
+python -m pytest tests -q          # 82 个测试（含 28 个审计用例）
+python tests/smoke_test.py         # 12 个场景的冒烟测试
 ```
+
+## 版本历史
+
+| 版本 | 变更 |
+|---|---|
+| 1.0.1 | 上线前全检修复：预算为 0 时不再调用宿主（`set_adjust` 会唤醒 Planner，白花钱）；例外群改为逐会话跟踪倍率（修复全局不变时例外群永不下发的缺陷）；异常统计结构留 warning 痕迹；脏 override 单项跳过不再拖垮整份配置；`_message_text` 加递归深度上限；NaN/Inf 倍率过滤 |
+| 1.0.0 | 首个版本：月度预算、节奏比控制律、单群例外额度、暂停/恢复/重置、`budget_status` 工具 |
+
