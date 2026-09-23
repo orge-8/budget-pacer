@@ -515,6 +515,7 @@ class BudgetPacerPlugin(MaiBotPlugin):
         self._paused: bool = False
         self._state_month: str = ""
         self._last_reason: str = ""
+        self._was_enabled: bool = False
 
     # ---- 生命周期 ----
 
@@ -523,6 +524,7 @@ class BudgetPacerPlugin(MaiBotPlugin):
         self._load_state()
         if self.config.plugin.enabled:
             self._start_loop()
+        self._was_enabled = bool(self.config.plugin.enabled)
         self.ctx.logger.info(
             "月度预算插件已加载：预算=%.4f 元，巡检=%d 秒，加频=%s",
             self._effective_budget(),
@@ -532,6 +534,8 @@ class BudgetPacerPlugin(MaiBotPlugin):
 
     async def on_unload(self) -> None:
         await self._stop_loop()
+        # 宿主倍率是内存态：插件卸载后没人再管它，不复位就会一直压着发言频率
+        await self._reset_adjust_to_default("插件卸载")
         self._save_state()
         self.ctx.logger.info("月度预算插件已卸载")
 
@@ -539,9 +543,28 @@ class BudgetPacerPlugin(MaiBotPlugin):
         if scope != "self":
             return
         self.ctx.logger.info("配置已更新：version=%s", version)
+        # self.config 在钩子触发时可能已被宿主换成新配置，
+        # 不能用它判断「从开到关」，用自己记录的上次状态
+        was_enabled = self._was_enabled
         await self._stop_loop()
-        if self.config.plugin.enabled:
+        now_enabled = bool(self.config.plugin.enabled)
+        self._was_enabled = now_enabled
+        if now_enabled:
             self._start_loop()
+        elif was_enabled:
+            # 从开到关：立即复位宿主倍率，否则禁用后频率仍停留在上次压制的值
+            await self._reset_adjust_to_default("插件禁用")
+
+    async def _reset_adjust_to_default(self, reason: str) -> None:
+        """把宿主倍率复位为 1.0 并清空本地跟踪状态。失败只记日志不抛出。"""
+        try:
+            await self._apply_adjust(1.0)
+        except Exception as exc:
+            self.ctx.logger.warning("复位宿主倍率失败（%s）：%s", reason, exc)
+            return
+        self._applied_adjust = 1.0
+        self._session_adjust.clear()
+        self.ctx.logger.info("%s：宿主倍率已复位为 1.0", reason)
 
     # ---- 启动时自检纯函数 ----
 
