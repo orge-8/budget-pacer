@@ -263,6 +263,29 @@ async def test_unexpected_statistics_shape_is_logged(bp):
 
 
 @async_test
+async def test_unexpected_db_rows_shape_is_logged(bp):
+    """明细查询返回非 list（结构变化）不能静默按 0 算——例外群闸门会失效。"""
+    from datetime import timedelta
+
+    overrides = {"budget": {"monthly_limit": 30.0}, "overrides": ["10002:5.0"]}
+    plugin, ctx = make(
+        bp,
+        payload=series_with(0.0),
+        config=overrides,
+        streams=[
+            {"session_id": "group-B", "stream_id": "group-B", "group_id": "10002", "is_group_session": True},
+        ],
+        db_rows="not-a-list",  # 宿主返回结构异常
+    )
+    start = (datetime.now() - timedelta(days=1)).replace(microsecond=0)
+    spend = await plugin._session_spend("group-B", start)
+    assert spend == 0.0, "结构异常时按 0 处理"
+    assert ctx.logger.has("结构异常", "warning"), (
+        f"明细结构异常未留痕。日志：\n{ctx.logger.text()}"
+    )
+
+
+@async_test
 async def test_set_adjust_returning_false_is_counted(bp):
     """宿主返回 False（会话不存在）时应体现在日志里，不能只报成功数。"""
     plugin, ctx = make(

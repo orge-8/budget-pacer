@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "id": "org.orge-8.budget-pacer",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "name": "月度预算发言频率调节",
   "description": "设定一个月度 API 预算，按「花费进度 ÷ 时间进度」的节奏比动态调节麦麦的发言频率，让整月花费贴近预算。支持全局预算与单会话例外额度。",
   "author": {

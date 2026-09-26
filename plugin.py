@@ -900,6 +900,12 @@ class BudgetPacerPlugin(MaiBotPlugin):
             return 0.0
 
         if not isinstance(rows, list):
+            # 结构不符会按 0 花费处理 → 例外群闸门失效，必须留痕
+            self.ctx.logger.warning(
+                "会话花费查询返回结构异常(%s)，按 0 处理（例外群闸门可能失效）：%s",
+                session_id,
+                type(rows).__name__,
+            )
             return 0.0
 
         total = 0.0
